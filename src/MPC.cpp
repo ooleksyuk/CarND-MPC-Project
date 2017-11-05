@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 // Set the time step length and duration
-size_t N = 25;
-double dt = 0.05;
+size_t N = 10;//25;
+double dt = 0.1;//0.05;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -21,11 +21,12 @@ double dt = 0.05;
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
 
+const double angel = 19.0;
+
 // Set up reference values for cte, epsi and velocity
 double ref_v = 60.0; //mph
 double ref_cte = 0.0;
 double ref_epsi = 0.0;
-double ref_delta = 500;
 
 // Define and initialize vector X variable and actuator
 size_t x_start = 0;
@@ -53,55 +54,60 @@ class FG_eval {
     // Reference 'state cost'. Define cost related reference state and
     // anything related to it;
     for (int t = 0; t < N; t++) {
-      fg[0] += CppAD::pow(vars[cte_start + t] - ref_cte, 2);
-      fg[0] += CppAD::pow(vars[epsi_start + t] - ref_epsi, 2);
+      fg[0] += 3000 * CppAD::pow(vars[cte_start + t] - ref_cte, 2);
+      fg[0] += 3000 * CppAD::pow(vars[epsi_start + t] - ref_epsi, 2);
       fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
     // Punish actuations, minimize it's use.
     for (int t = 0; t < N - 1; t++) {
-      fg[0] += ref_delta * CppAD::pow(vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start], 2);
+      fg[0] += 500 * CppAD::pow(vars[delta_start + t], 2);
+      fg[0] += 5 * CppAD::pow(vars[a_start], 2);
+      fg[0] += 5 * CppAD::pow(vars[delta_start], 2);
     }
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
-      fg[0] += ref_delta * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+      fg[0] += 200 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+      fg[0] += 10 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
 
     // Set up model constrains.
     // Initial constrains. Add 1 to each of the starting indices due to cost being located at
     // index 0 of 'fg'.
     // This bumps up the position of all other values.
-    fg[x_start + 1] = vars[x_start];
-    fg[y_start + 1] = vars[y_start];
-    fg[psi_start + 1] = vars[psi_start];
-    fg[v_start + 1] = vars[v_start];
-    fg[cte_start + 1] = vars[cte_start];
+    fg[x_start + 1]    = vars[x_start];
+    fg[y_start + 1]    = vars[y_start];
+    fg[psi_start + 1]  = vars[psi_start];
+    fg[v_start + 1]    = vars[v_start];
+    fg[cte_start + 1]  = vars[cte_start];
     fg[epsi_start + 1] = vars[epsi_start];
-    double step;
 
     for (int t = 0; t < N - 1; t++) {
       // Set up x1, y1, psi1, v1, cte1, epsi1 at time 't + 1'.
-      AD<double> x1 = vars[x_start + t + 1];
-      AD<double> y1 = vars[y_start + t + 1];
-      AD<double> psi1 = vars[psi_start + t + 1];
-      AD<double> v1 = vars[v_start + t + 1];
-      AD<double> cte1 = vars[cte_start + t + 1];
+      AD<double> x1    = vars[x_start + t + 1];
+      AD<double> y1    = vars[y_start + t + 1];
+      AD<double> psi1  = vars[psi_start + t + 1];
+      AD<double> v1    = vars[v_start + t + 1];
+      AD<double> cte1  = vars[cte_start + t + 1];
       AD<double> epsi1 = vars[epsi_start + t + 1];
 
       // Set up x0, y0, psi0, v0, cte0, epsi0 at time 't'.
-      AD<double> x0 = vars[x_start + t];
-      AD<double> y0 = vars[y_start + t];
-      AD<double> psi0 = vars[psi_start + t];
-      AD<double> v0 = vars[v_start + t];
-      AD<double> cte0 = vars[cte_start + t];
+      AD<double> x0    = vars[x_start + t];
+      AD<double> y0    = vars[y_start + t];
+      AD<double> psi0  = vars[psi_start + t];
+      AD<double> v0    = vars[v_start + t];
+      AD<double> cte0  = vars[cte_start + t];
       AD<double> epsi0 = vars[epsi_start + t];
 
       // Only consider the actuation at time 't'.
       AD<double> delta0 = vars[delta_start + t];
       AD<double> a0 = vars[a_start + t];
+
+      if (t > 1) {
+        delta0 = vars[delta_start + t - 1];
+        a0 = vars[a_start + t - 1];
+      }
 
       // Define and initialize 3rd order derivative
       AD<double> f0 = coeffs[0] + coeffs[1] * x0 + coeffs[2] * CppAD::pow(x0, 2) + coeffs[3] * CppAD::pow(x0, 3);
@@ -115,13 +121,12 @@ class FG_eval {
       // v_[t+1] = v[t] + a[t] * dt
       // cte[t+1] = f(x[t]) - y[t] + v[t] * sin(epsi[t]) * dt
       // epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
-      step = t + 2;
-      fg[x_start + step]    = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
-      fg[y_start + step]    = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
-      fg[psi_start + step]  = psi1 - (psi0 + v0 * delta0 / Lf * dt);
-      fg[v_start + step]    = v1 - (v0 + a0 * dt);
-      fg[cte_start + step]  = cte1 - (f0 - y0 + v0 * CppAD::sin(epsi0) * dt);
-      fg[epsi_start + step] = epsi1 - (psi0 - psides0 + v0 * delta0 / Lf * dt);
+      fg[x_start + t + 2]    = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
+      fg[y_start + t + 2]    = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
+      fg[psi_start + t + 2]  = psi1 - (psi0 + v0 * delta0/ Lf * dt);
+      fg[v_start + t + 2]    = v1 - (v0 + a0 * dt);
+      fg[cte_start + t + 2]  = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
+      fg[epsi_start + t + 2] = epsi1 - (psi0 - psides0 + v0  * delta0/ Lf * dt);
     }
   }
 };
@@ -132,8 +137,14 @@ class FG_eval {
 MPC::MPC() {}
 MPC::~MPC() {}
 
+const double MPC::pi() { return M_PI; }
+double MPC::deg2rad(double x) { return x * pi() / 180; }
+double MPC::rad2deg(double x) { return x * 180 / pi(); }
+
 vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
+  x_vals.clear();
+  y_vals.clear();
 //  size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
@@ -148,11 +159,9 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   double v = state[3];
   double cte = state[4];
   double epsi = state[5];
-  int vector_len = 6;
-  int actuators_len = 2;
-  size_t n_vars = N * vector_len + (N - 1) * actuators_len;
+  size_t n_vars = N * 6 + (N - 1) * 2;
   // Set the number of constraints
-  size_t n_constraints = N * vector_len;
+  size_t n_constraints = N * 6;
 
   // Initial value of the independent variables.
   // SHOULD BE 0 besides initial state.
@@ -179,8 +188,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // The upper and lower limits of delta are set to -25 and 25 degrees (values in radians).
   for (int i = delta_start; i < a_start; i++) {
-    vars_lowerbound[i] = - 19 * M_PI / 180.0;
-    vars_upperbound[i] = 19 * M_PI / 180.0;
+    vars_lowerbound[i] = - deg2rad(angel);
+    vars_upperbound[i] = deg2rad(angel);
   }
 
   // Acceleration/decceleration upper and lower limits.
@@ -253,8 +262,13 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
   std::cout << "Delta " << solution.x[delta_start + 2] << std::endl;
-  std::cout << "Epsi " << solution.x[epsi_start + 1] << std::endl;
+  std::cout << "Error psi " << solution.x[epsi_start + 1] << std::endl;
   std::cout << "Accuracy " << solution.x[a_start + 2] << std:: endl;
+
+  for(int i = 0; i < N - 1; i++) {
+    x_vals.push_back(solution.x[x_start + i + 1]);
+    y_vals.push_back(solution.x[y_start + i + 1]);
+  }
 
   return {
       solution.x[x_start + 1],
@@ -263,7 +277,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
       solution.x[v_start + 1],
       solution.x[cte_start + 1],
       solution.x[epsi_start + 1],
-      solution.x[delta_start + 1] + solution.x[delta_start],
+      (solution.x[delta_start + 1] + solution.x[delta_start]) / deg2rad(angel),
       solution.x[a_start + 1] + solution.x[a_start]
   };
 }
@@ -274,8 +288,10 @@ void MPC::TransformCoordinates(vector<double> &x_vals, vector<double> y_vals,
   vector<double> t_y;
 
   for(int i = 0; i < x_vals.size(); i ++) {
-    t_x.push_back((x_vals[i] - p_x) * cos(psi) + (y_vals[i] - p_y) * sin(psi));
-    t_y.push_back(-(x_vals[i] - p_x) * sin(psi) + (y_vals[i] - p_y) * cos(psi));
+    double x_diff = x_vals[i] - p_x;
+    double y_diff = y_vals[i] - p_y;
+    t_x.push_back(x_diff * cos(-psi) + y_diff * sin(-psi));
+    t_y.push_back(x_diff * sin(-psi) + y_diff * cos(-psi));
   }
 
   x_vals = t_x;
