@@ -1,6 +1,4 @@
-#ifndef MPC_H
-#define MPC_H
-
+#pragma once
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
 
@@ -15,6 +13,5 @@ class MPC {
   // Solve the model given an initial state and polynomial coefficients.
   // Return the first actuatotions.
   vector<double> Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs);
+  void TransformCoordinates(vector<double> &x_vals, vector<double> y_vals, double p_x, double p_y, double psi);
 };
-
-#endif /* MPC_H */
