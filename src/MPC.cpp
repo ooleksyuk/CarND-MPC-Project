@@ -21,7 +21,7 @@ double dt = 0.1;//0.05;
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
 
-const double angel = 19.0;
+
 
 // Set up reference values for cte, epsi and velocity
 double ref_v = 60.0; //mph
@@ -54,16 +54,16 @@ class FG_eval {
     // Reference 'state cost'. Define cost related reference state and
     // anything related to it;
     for (int t = 0; t < N; t++) {
-      fg[0] += 3000 * CppAD::pow(vars[cte_start + t] - ref_cte, 2);
-      fg[0] += 3000 * CppAD::pow(vars[epsi_start + t] - ref_epsi, 2);
+      fg[0] += 1500 * CppAD::pow(vars[cte_start + t] - ref_cte, 2);
+      fg[0] += 200 * CppAD::pow(vars[epsi_start + t] - ref_epsi, 2);
       fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
     }
 
     // Punish actuations, minimize it's use.
     for (int t = 0; t < N - 1; t++) {
       fg[0] += 500 * CppAD::pow(vars[delta_start + t], 2);
-      fg[0] += 5 * CppAD::pow(vars[a_start], 2);
-      fg[0] += 5 * CppAD::pow(vars[delta_start], 2);
+      fg[0] += 5 * CppAD::pow(vars[a_start + t], 2);
+//      fg[0] += 5 * CppAD::pow(vars[delta_start], 2);
     }
 
     // Minimize the value gap between sequential actuations.
@@ -111,7 +111,7 @@ class FG_eval {
 
       // Define and initialize 3rd order derivative
       AD<double> f0 = coeffs[0] + coeffs[1] * x0 + coeffs[2] * CppAD::pow(x0, 2) + coeffs[3] * CppAD::pow(x0, 3);
-      AD<double> psides0 = CppAD::atan(coeffs[1] + 2 * coeffs[2] * x0 * coeffs[3] * CppAD::pow(x0, 2));
+      AD<double> psides0 = CppAD::atan(coeffs[1] + 2 * coeffs[2] * x0 + 3.0 * coeffs[3] * CppAD::pow(x0, 2));
 
       // Constraint this value to be 0.
       // Equations for the model:
@@ -123,10 +123,10 @@ class FG_eval {
       // epsi[t+1] = psi[t] - psides[t] + v[t] * delta[t] / Lf * dt
       fg[x_start + t + 2]    = x1 - (x0 + v0 * CppAD::cos(psi0) * dt);
       fg[y_start + t + 2]    = y1 - (y0 + v0 * CppAD::sin(psi0) * dt);
-      fg[psi_start + t + 2]  = psi1 - (psi0 + v0 * delta0/ Lf * dt);
+      fg[psi_start + t + 2]  = psi1 - (psi0 + v0 * delta0 / Lf * dt);
       fg[v_start + t + 2]    = v1 - (v0 + a0 * dt);
       fg[cte_start + t + 2]  = cte1 - ((f0 - y0) + (v0 * CppAD::sin(epsi0) * dt));
-      fg[epsi_start + t + 2] = epsi1 - (psi0 - psides0 + v0  * delta0/ Lf * dt);
+      fg[epsi_start + t + 2] = epsi1 - (psi0 - psides0 + v0  * delta0 / Lf * dt);
     }
   }
 };
@@ -141,24 +141,23 @@ const double MPC::pi() { return M_PI; }
 double MPC::deg2rad(double x) { return x * pi() / 180; }
 double MPC::rad2deg(double x) { return x * 180 / pi(); }
 
-vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
+void MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   bool ok = true;
-  x_vals.clear();
-  y_vals.clear();
 //  size_t i;
   typedef CPPAD_TESTVECTOR(double) Dvector;
 
-  // Set the number of model variables (includes both states and inputs).
-  // For example: If the state is a 4 element vector, the actuators is a 2
-  // element vector and there are 10 timesteps. The number of variables is:
-  //
-  // 4 * 10 + 2 * 9
   double x = state[0];
   double y = state[1];
   double psi = state[2];
   double v = state[3];
   double cte = state[4];
   double epsi = state[5];
+
+  // Set the number of model variables (includes both states and inputs).
+  // For example: If the state is a 4 element vector, the actuators is a 2
+  // element vector and there are 10 timesteps. The number of variables is:
+  //
+  // 4 * 10 + 2 * 9
   size_t n_vars = N * 6 + (N - 1) * 2;
   // Set the number of constraints
   size_t n_constraints = N * 6;
@@ -261,25 +260,20 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   //
   // {...} is shorthand for creating a vector, so auto x1 = {1.0,2.0}
   // creates a 2 element double vector.
-  std::cout << "Delta " << solution.x[delta_start + 2] << std::endl;
-  std::cout << "Error psi " << solution.x[epsi_start + 1] << std::endl;
-  std::cout << "Accuracy " << solution.x[a_start + 2] << std:: endl;
+//  std::cout << "Delta " << solution.x[delta_start + 2] << std::endl;
+//  std::cout << "Error psi " << solution.x[epsi_start + 1] << std::endl;
+//  std::cout << "Accuracy " << solution.x[a_start + 2] << std:: endl;
 
-  for(int i = 0; i < N - 1; i++) {
-    x_vals.push_back(solution.x[x_start + i + 1]);
-    y_vals.push_back(solution.x[y_start + i + 1]);
+  steer_value = 0 - solution.x[delta_start] / (angel * M_PI / 180.0);
+  throttle_value = - solution.x[a_start];
+
+  x_pred.clear();
+  y_pred.clear();
+
+  for(int t = 0; t < N; t++) {
+    x_pred.push_back(solution.x[x_start + t]);
+    y_pred.push_back(solution.x[y_start + t]);
   }
-
-  return {
-      solution.x[x_start + 1],
-      solution.x[y_start + 1],
-      solution.x[psi_start + 1],
-      solution.x[v_start + 1],
-      solution.x[cte_start + 1],
-      solution.x[epsi_start + 1],
-      (solution.x[delta_start + 1] + solution.x[delta_start]) / deg2rad(angel),
-      solution.x[a_start + 1] + solution.x[a_start]
-  };
 }
 
 void MPC::TransformCoordinates(vector<double> &x_vals, vector<double> y_vals,
@@ -290,8 +284,8 @@ void MPC::TransformCoordinates(vector<double> &x_vals, vector<double> y_vals,
   for(int i = 0; i < x_vals.size(); i ++) {
     double x_diff = x_vals[i] - p_x;
     double y_diff = y_vals[i] - p_y;
-    t_x.push_back(x_diff * cos(-psi) + y_diff * sin(-psi));
-    t_y.push_back(x_diff * sin(-psi) + y_diff * cos(-psi));
+    t_x.push_back(x_diff * cos(psi) + y_diff * sin(psi));
+    t_y.push_back( - x_diff * sin(psi) + y_diff * cos(psi));
   }
 
   x_vals = t_x;

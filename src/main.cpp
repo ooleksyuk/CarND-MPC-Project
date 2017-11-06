@@ -95,44 +95,29 @@ int main() {
           */
           mpc.TransformCoordinates(ptsx, ptsy, px, py, psi);
           auto coeffs = polyfit(Eigen::VectorXd::Map(ptsx.data(), ptsx.size()), Eigen::VectorXd::Map(ptsy.data(), ptsy.size()), 3);
-          double cte = polyeval(coeffs, 0);
+          double cte = polyeval(coeffs, px);
           double epsi = -atan(coeffs[1]);
           Eigen::VectorXd state(6);
-          state << 0, 0, 0, v, cte, epsi;
-          auto vars = mpc.Solve(state, coeffs);
-
-          double steer_value = vars[6];
-          double throttle_value = 0.6 * vars[7];
+          state << px, py, psi, v, cte, epsi;
+          mpc.Solve(state, coeffs);
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
           // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value;//mpc.deg2rad(19);
-          msgJson["throttle"] = throttle_value;
+          msgJson["steering_angle"] = mpc.steer_value;
+          msgJson["throttle"]       = mpc.throttle_value;
 
           //Display the MPC predicted trajectory 
-          vector<double> mpc_x_vals = mpc.x_vals;
-          vector<double> mpc_y_vals = mpc.y_vals;
-
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
-
-          msgJson["mpc_x"] = mpc_x_vals;
-          msgJson["mpc_y"] = mpc_y_vals;
+          msgJson["mpc_x"] = mpc.x_pred;
+          msgJson["mpc_y"] = mpc.y_pred;
 
           //Display the waypoints/reference line
-          vector<double> next_x_vals;// = ptsx;
-          vector<double> next_y_vals;// = ptsy;
-
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
-          for (double i = 0; i < 100; i += 3){
-            next_x_vals.push_back(i);
-            next_y_vals.push_back(polyeval(coeffs, i));
-          }
-
-          msgJson["next_x"] = next_x_vals;
-          msgJson["next_y"] = next_y_vals;
+          msgJson["next_x"] = ptsx;
+          msgJson["next_y"] = ptsy;
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
