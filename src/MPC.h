@@ -27,5 +27,5 @@ class MPC {
   double throttle_value;
 
   const double angel = 18.9; // 25; 21; 22; 21.5; 19; 15;
-  const double limit = 1.0e19;
+  const double limit = std::numeric_limits<double>::max(); //1.0e19;
 };

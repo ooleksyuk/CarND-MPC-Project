@@ -21,10 +21,9 @@ double dt = 0.1; // 0.05;
 // This is the length from front to CoG that has a similar radius.
 const double Lf = 2.67;
 
-// Set up reference values for cte, epsi and velocity
-double ref_cte = 0;
-double ref_error_psi = 0;
-double ref_velocity = 60; // miles per hour
+// Set up median velocity values
+// miles per hour, makes vehicle go faster in sharp corners make is unstuck
+double ref_velocity = 75; //85; //100; //70; //60;
 
 // Define and initialize vector X variable and actuator
 size_t x_start = 0;
@@ -53,21 +52,22 @@ class FG_eval {
     // Reference 'state cost'. Define cost related reference state and
     // anything related to it;
     for (int t = 0; t < N; t++) {
-      fg[0] += CppAD::pow(vars[cte_start + t] - ref_cte, 2);
-      fg[0] += CppAD::pow(vars[error_psi_start + t] - ref_error_psi, 2);
+      fg[0] += 3000 * CppAD::pow(vars[cte_start + t], 2);
+      fg[0] += 3000 * CppAD::pow(vars[error_psi_start + t], 2);
       fg[0] += CppAD::pow(vars[v_start + t] - ref_velocity, 2);
     }
 
     // Punish actuations, minimize it's use.
     for (int t = 0; t < N - 1; t++) {
-      fg[0] += 500 * CppAD::pow(vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t], 2);
+      fg[0] += 15 * CppAD::pow(vars[delta_start + t], 2);
+      fg[0] += 15 * CppAD::pow(vars[a_start + t], 2);
+      fg[0] += 705 * CppAD::pow(vars[delta_start + t] * vars[v_start + t], 2);
     }
 
     // Minimize the value gap between sequential actuations.
     for (int t = 0; t < N - 2; t++) {
-      fg[0] += 500 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-      fg[0] += CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+      fg[0] += 300 * CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+      fg[0] += 15 * CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
     }
 
     // Set up model constrains.
@@ -82,7 +82,7 @@ class FG_eval {
     fg[error_psi_start + 1] = vars[error_psi_start];
 
     for (int t = 0; t < N - 1; t++) {
-      // Set up x1, y1, psi1, v1, cte1, epsi1 at time 't + 1'.
+      // Set up x1, y1, psi1, v1, cte1, error_psi1 at time 't + 1', future.
       AD<double> x1         = vars[x_start + t + 1];
       AD<double> y1         = vars[y_start + t + 1];
       AD<double> psi1       = vars[psi_start + t + 1];
@@ -90,7 +90,7 @@ class FG_eval {
       AD<double> cte1       = vars[cte_start + t + 1];
       AD<double> error_psi1 = vars[error_psi_start + t + 1];
 
-      // Set up x0, y0, psi0, v0, cte0, epsi0 at time 't'.
+      // Set up x0, y0, psi0, v0, cte0, error_psi0 at time 't', current.
       AD<double> x0         = vars[x_start + t];
       AD<double> y0         = vars[y_start + t];
       AD<double> psi0       = vars[psi_start + t];
@@ -102,6 +102,7 @@ class FG_eval {
       AD<double> delta0     = vars[delta_start + t];
       AD<double> a0         = vars[a_start + t];
 
+      // if this is not the initial step, user previous step data for actuator
       if (t > 1) {
         delta0 = vars[delta_start + t - 1];
         a0 = vars[a_start + t - 1];
@@ -184,13 +185,13 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   }
 
   // The upper and lower limits of delta are set to -25 and 25 degrees (values in radians).
-  for (int i = delta_start; i < a_start; i++) {
-    vars_lowerbound[i] = -deg2rad(angel);
+  for (size_t i = delta_start; i < a_start; i++) {
+    vars_lowerbound[i] = -deg2rad(angel); // convert angel to radiant
     vars_upperbound[i] = deg2rad(angel);
   }
 
   // Acceleration/decceleration upper and lower limits.
-  for (int i = a_start; i < n_vars; i++) {
+  for (size_t i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
   }
