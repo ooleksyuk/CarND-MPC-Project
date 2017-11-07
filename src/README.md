@@ -84,7 +84,7 @@ By sending both actuators makes the model stay accurate and handle the latency.
 
 ### Simulator
 
-[The link to a video of the vehicle on the track](Model Predictive Controller Project)
+[The link to a video of the vehicle on the track](https://youtu.be/O0po-PpSU7Y)
 
 #### The vehicle must successfully drive a lap around the track.
 
